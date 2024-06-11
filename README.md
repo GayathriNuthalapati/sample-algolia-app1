@@ -1,0 +1,1 @@
+# sample-algolia-app1
