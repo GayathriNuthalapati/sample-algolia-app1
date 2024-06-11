@@ -1,0 +1,132 @@
+name: Reusable Workflow To Deploy MuleSoft Application
+ 
+on:
+  workflow_call:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout this repo
+      uses: actions/checkout@v3
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    - name: Set up JDK 1.8
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'zulu'
+        java-version: 8
+    - name: Build with Maven
+      run: mvn -B package --file pom.xml
+    - name: Stamp artifact file name with commit hash
+      run: |
+        artifactName1=$(ls target/*.jar | head -1)
+        commitHash=$(git rev-parse --short "$GITHUB_SHA")
+        artifactName2=$(ls target/*.jar | head -1 | sed "s/.jar/-$commitHash.jar/g")
+        mv $artifactName1 $artifactName2
+    - name: Upload artifact 
+      uses: actions/upload-artifact@v3
+      with:
+          name: artifacts
+          path: target/*.jar
+
+
+  deploydev:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:    
+    - name: Checkout this repo
+      uses: actions/checkout@v3
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    - uses: actions/download-artifact@v3
+      with:
+        name: artifacts
+    - name: Deploy to dev
+      env:
+        USERNAME: ${{ secrets.anypoint_platform_username}}
+        PASSWORD: ${{ secrets.anypoint_platform_password}}
+        KEY: ${{ secrets.decryption_key }}
+      run: |
+        artifactName=$(ls *.jar | head -1)
+        mvn deploy -DmuleDeploy \
+         -Dmule.artifact=$artifactName \
+         -Danypoint.username=AlgoliaSample \
+         -Danypoint.password=Algolia#123 \
+         -Denv=dev \
+         -Dappname=sample-algolia-app \
+         -Ddecryption.key="$KEY" \
+         -Danypoint.platform.client_id= 46e82a3911ad4317a27de8615b56e0a6\
+         -Danypoint.platform.client_secret= Ca66053c2abC45918150C3868A9b6f3F
+         
+  deployqa:
+    needs: deploydev
+    runs-on: ubuntu-latest
+    steps:    
+    - name: Checkout this repo
+      uses: actions/checkout@v3
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    - uses: actions/download-artifact@v3
+      with:
+        name: artifacts
+    - name: Deploy to qa
+      env:
+        USERNAME: ${{ secrets.anypoint_platform_username}}
+        PASSWORD: ${{ secrets.anypoint_platform_password}}
+        KEY: ${{ secrets.decryption_key }}
+      run: |
+        artifactName=$(ls *.jar | head -1)
+        mvn deploy -DmuleDeploy \
+         -Dmule.artifact=$artifactName \
+         -Danypoint.username="$USERNAME" \
+         -Danypoint.password="$PASSWORD" \
+         -Denv=qa \
+         -Dappname=algolia-123243-qa-g \
+         -Ddecryption.key="$KEY"
+  
+  deployprod:
+    needs: deployqa
+    runs-on: ubuntu-latest
+    steps:    
+    - name: Checkout this repo
+      uses: actions/checkout@v3
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    - uses: actions/download-artifact@v3
+      with:
+        name: artifacts
+    - name: Deploy to prod
+      env:
+        USERNAME: ${{ secrets.anypoint_platform_username}}
+        PASSWORD: ${{ secrets.anypoint_platform_password}}
+        KEY: ${{ secrets.decryption_key }}
+      run: |
+        artifactName=$(ls *.jar | head -1)
+        mvn deploy -DmuleDeploy \
+         -Dmule.artifact=$artifactName \
+         -Danypoint.username="$USERNAME" \
+         -Danypoint.password="$PASSWORD" \
+         -Denv=prod \
+         -Dappname=algolia-123243-prod-g \
+         -Ddecryption.key="$KEY"
